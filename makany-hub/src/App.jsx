@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+mport { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { storage } from "./storage.js";
 
 /* ══════════════════════════════════════════════════
@@ -38,6 +38,7 @@ const C = {
   red:"#C0392B",redBg:"#FEE8E8",
   blue:"#2563A8",blueBg:"#E8F0FD",
   purple:"#7B3FA0",purpleBg:"#F3E8FD",
+  teal:"#0E7490",tealBg:"#E0F7FA",
 };
 
 /* ══════════════════════════════════════════════════
@@ -49,20 +50,22 @@ const TYPES={
   link:{label:"رابط",icon:"🔗",color:C.blue,bg:C.blueBg},
   page:{label:"صفحة",icon:"📝",color:C.purple,bg:C.purpleBg},
 };
-const CATS=["فقه النفس","التربية والأسرة","الروحانيات","الصحة النفسية","التطوير الذاتي","العلاقات","الإنتاجية","معرفة عامة","أخرى"];
+const CATS_MAIN=["اقرأ","ونفس","لتعارفوا"];
+const CATS_SUB={"اقرأ":["إمساك وتوقف وصمت","المدخلات والحواس","الدماغ","فقه العقل","أصول الإيمان","أصول الفقه","خارطة العلوم"],"ونفس":["فقه عمل اليوم والليلة","أقل القليل","تزكية النفس","الصحة النفسية","وهم الكمال","الصوارف"],"لتعارفوا":["الصدق والصبر والرحمة","فقه الاختلاف","العلاقات الأسرية","الصحبة","التواصل الاجتماعي"]};
+const ALL_CATS=[...CATS_MAIN,...Object.values(CATS_SUB).flat(),"أخرى"];
 
 /* ══════════════════════════════════════════════════
    PLANNER CONFIG
 ══════════════════════════════════════════════════ */
 const PRAYERS=[
-  {key:"fajrS",label:"ركعتا الفجر",icon:"🌙"},
-  {key:"fajr", label:"الفجر",icon:"🌅"},
-  {key:"duha", label:"ركعتا الضحى",icon:"☀️"},
-  {key:"dhuhr",label:"الظهر",icon:"🕛"},
-  {key:"asr",  label:"العصر",icon:"🕓"},
-  {key:"maghrib",label:"المغرب",icon:"🌇"},
-  {key:"isha", label:"العشاء",icon:"🌃"},
-  {key:"witr", label:"ركعة الوتر",icon:"✨"},
+  {key:"fajrS",label:"ركعتا الفجر",icon:"🌙",hasDua:true,hasKhatma:false,hasQiyam:false},
+  {key:"fajr", label:"الفجر",icon:"🌅",hasDua:false,hasKhatma:true,hasQiyam:false},
+  {key:"duha", label:"ركعتا الضحى",icon:"☀️",hasDua:false,hasKhatma:true,hasQiyam:false},
+  {key:"dhuhr",label:"الظهر",icon:"🕛",hasDua:false,hasKhatma:true,hasQiyam:false},
+  {key:"asr",  label:"العصر",icon:"🕓",hasDua:false,hasKhatma:true,hasQiyam:false},
+  {key:"maghrib",label:"المغرب",icon:"🌇",hasDua:true,hasKhatma:true,hasQiyam:false},
+  {key:"isha", label:"العشاء",icon:"🌃",hasDua:false,hasKhatma:true,hasQiyam:true},
+  {key:"witr", label:"ركعة الوتر",icon:"✨",hasDua:true,hasKhatma:false,hasQiyam:true},
 ];
 const FRUITS=[
   {key:"wird",    label:"الورد اليومي",icon:"📖",color:"#1E5C3A",hint:"القرآن الكريم"},
@@ -71,7 +74,8 @@ const FRUITS=[
   {key:"wahy",    label:"وحي",          icon:"🌿",color:"#1E5C3A",hint:"علوم الوحي"},
   {key:"riyada",  label:"رياضة",        icon:"🏃",color:"#C0392B",hint:"الصحة الجسدية"},
   {key:"tarwih",  label:"ترويح",        icon:"🎮",color:"#7B3FA0",hint:"الترفيه المباح"},
-  {key:"taaaruf", label:"لتعارفوا",     icon:"👥",color:"#2563A8",hint:"التواصل الاجتماعي الواقعي"},
+  {key:"taaaruf", label:"لتعارفوا",     icon:"👥",color:"#2563A8",hint:"صلة اجتماعية حقيقية وجاهية"},
+  {key:"mudhakkira",label:"مذكرة",      icon:"📝",color:"#B8822A",hint:"كتابة خواطر وثمرات اليوم"},
 ];
 // Map fruit keys to library tag suggestions
 const FRUIT_TAGS={
@@ -82,6 +86,7 @@ const FRUIT_TAGS={
   riyada:["رياضة","صحة","جسد"],
   tarwih:["ترويح","فن","أدب","قصص"],
   taaaruf:["علاقات","أسرة","مجتمع","لتعارفوا"],
+  mudhakkira:["خواطر","تأمل","مذكرة","كتابة"],
 };
 
 /* ══════════════════════════════════════════════════
@@ -93,6 +98,26 @@ const fmtDate=iso=>{if(!iso)return"";return new Date(iso).toLocaleDateString("ar
 const todayStr=()=>new Date().toISOString().slice(0,10);
 const monthStr=()=>new Date().toISOString().slice(0,7);
 const fmtMonthAr=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1,1).toLocaleDateString("ar-SA",{year:"numeric",month:"long"});};
+// Hijri date formatting using Intl (built into browsers)
+const fmtHijri=(dateStr)=>{
+  try{
+    const d=new Date(dateStr+"T12:00:00");
+    return d.toLocaleDateString("ar-SA-u-ca-islamic-umalqura",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
+  }catch{return"";}
+};
+const fmtHijriShort=(dateStr)=>{
+  try{
+    const d=new Date(dateStr+"T12:00:00");
+    return d.toLocaleDateString("ar-SA-u-ca-islamic-umalqura",{month:"long",day:"numeric"});
+  }catch{return"";}
+};
+const isRamadanMonth=(dateStr)=>{
+  try{
+    const d=new Date(dateStr+"T12:00:00");
+    const hijri=d.toLocaleDateString("en-SA-u-ca-islamic-umalqura",{month:"numeric"});
+    return parseInt(hijri)===9;
+  }catch{return false;}
+};
 const sharedTags=(a,b)=>{if(!a.tags||!b.tags)return 0;return a.tags.filter(t=>b.tags.includes(t)).length;};
 const emptyDay=date=>({date,prayers:Object.fromEntries(PRAYERS.map(p=>[p.key,""])),fruits:Object.fromEntries(FRUITS.map(f=>[f.key,false])),notes:"",linkedFruits:{}});
 const emptyMonth=month=>({month,allah:"",ana:"",akhar:""});
@@ -147,19 +172,29 @@ function FruitCheck({fruit,checked,onChange}){
 /* ══════════════════════════════════════════════════
    PRAYER SLOT
 ══════════════════════════════════════════════════ */
-function PrayerSlot({prayer,value,onChange}){
+function PrayerSlot({prayer,value,onChange,isRamadan}){
   const[open,setOpen]=useState(false);
+  // value is now string (old format) or will be treated as notes
+  const notes=typeof value==="string"?value:"";
+  const done=!!notes.trim();
   return(
-    <div style={{background:C.surf,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+    <div style={{background:C.surf,borderRadius:14,border:`2px solid ${done?C.g+"44":C.border}`,overflow:"hidden",transition:"all .2s"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",cursor:"pointer",userSelect:"none"}}>
         <span style={{fontSize:20}}>{prayer.icon}</span>
-        <span style={{fontSize:14,fontWeight:700,color:C.dark,flex:1}}>{prayer.label}</span>
-        {value&&<span style={{width:8,height:8,borderRadius:"50%",background:C.gL,flexShrink:0}}/>}
+        <span style={{fontSize:14,fontWeight:700,color:done?C.g:C.dark,flex:1}}>{prayer.label}</span>
+        {isRamadan&&(
+          <div style={{display:"flex",gap:4}}>
+            {prayer.hasDua&&<span style={{fontSize:13}} title="دعاء">🤲</span>}
+            {prayer.hasKhatma&&<span style={{fontSize:13}} title="ختمة رمضان">📖</span>}
+            {prayer.hasQiyam&&<span style={{fontSize:13}} title="قيام">🌙</span>}
+          </div>
+        )}
+        {done&&<span style={{width:8,height:8,borderRadius:"50%",background:C.gL,flexShrink:0}}/>}
         <span style={{color:C.muted,fontSize:16}}>{open?"▲":"▼"}</span>
       </div>
       {open&&(
         <div style={{padding:"0 16px 14px"}}>
-          <textarea dir="rtl" value={value} onChange={e=>onChange(e.target.value)} rows={3}
+          <textarea dir="rtl" value={notes} onChange={e=>onChange(e.target.value)} rows={3}
             placeholder={`ما أعمالك في ${prayer.label}؟`}
             style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:"#FAFAF5",fontFamily:"Cairo",fontSize:13,color:C.dark,resize:"vertical",lineHeight:1.9}}/>
         </div>
@@ -209,7 +244,7 @@ function FruitLinker({fruit,linkedItems,allItems,onLink,onUnlink}){
 /* ══════════════════════════════════════════════════
    DAILY VIEW
 ══════════════════════════════════════════════════ */
-function DailyView({day,setDay,allItems,dateStr,onDateChange}){
+function DailyView({day,setDay,allItems,dateStr,onDateChange,isRamadan}){
   const[tab,setTab]=useState("prayers");
   const prayersDone=PRAYERS.filter(p=>day.prayers[p.key]?.trim()).length;
   const fruitsDone=FRUITS.filter(f=>day.fruits[f.key]).length;
@@ -226,8 +261,12 @@ function DailyView({day,setDay,allItems,dateStr,onDateChange}){
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,background:C.surf,borderRadius:16,padding:"14px 18px",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(0,0,0,.04)"}}>
         <button onClick={()=>{const d=new Date(dateStr);d.setDate(d.getDate()-1);onDateChange(d.toISOString().slice(0,10));}} style={{...S.ghost,padding:"6px 14px"}}>◀</button>
         <div style={{flex:1,textAlign:"center"}}>
-          <div style={{fontSize:17,fontWeight:900,color:C.dark}}>{new Date(dateStr+"T12:00:00").toLocaleDateString("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+          <div style={{fontSize:17,fontWeight:900,color:C.dark}}>{fmtHijri(dateStr)}</div>
+          <div style={{fontSize:12,color:C.muted}}>{new Date(dateStr+"T12:00:00").toLocaleDateString("ar-SA",{year:"numeric",month:"long",day:"numeric"})}</div>
+          <div style={{display:"flex",gap:4,justifyContent:"center",marginTop:4}}>
           {dateStr===todayStr()&&<span style={{fontSize:11,background:C.g,color:"#fff",borderRadius:20,padding:"2px 10px"}}>اليوم</span>}
+          {isRamadan&&<span style={{fontSize:11,background:C.gold,color:"#fff",borderRadius:20,padding:"2px 10px",marginRight:4}}>🌙 رمضان</span>}
+          </div>
         </div>
         <button onClick={()=>{const d=new Date(dateStr);d.setDate(d.getDate()+1);onDateChange(d.toISOString().slice(0,10));}} style={{...S.ghost,padding:"6px 14px"}}>▶</button>
       </div>
@@ -253,8 +292,8 @@ function DailyView({day,setDay,allItems,dateStr,onDateChange}){
       {/* Prayers */}
       {tab==="prayers"&&(
         <div style={{display:"flex",flexDirection:"column",gap:10}} className="fade">
-          <p style={{fontSize:13,color:C.muted,marginBottom:4}}>سجّل ما فعلته في كل وقت — أو خطط لما ستفعله</p>
-          {PRAYERS.map(p=><PrayerSlot key={p.key} prayer={p} value={day.prayers[p.key]||""} onChange={v=>updatePrayer(p.key,v)}/>)}
+          <p style={{fontSize:13,color:C.muted,marginBottom:4}}>سجّل ما فعلته في كل وقت{isRamadan?" — ختمة رمضان: 📖 · دعاء: 🤲 · قيام: 🌙":""}</p>
+          {PRAYERS.map(p=><PrayerSlot key={p.key} prayer={p} value={day.prayers[p.key]||""} onChange={v=>updatePrayer(p.key,v)} isRamadan={isRamadan}/>)}
         </div>
       )}
 
@@ -316,9 +355,9 @@ function MonthlyView({goals,setGoals,monthKey,onMonthChange,allDays}){
   const daysWithEntry=monthDays.filter(d=>d.notes?.trim()||FRUITS.some(f=>d.fruits[f.key])).length;
 
   const GOALS=[
-    {key:"allah",label:"الله",icon:"🕌",color:C.g,hint:"علاقتي مع الله — عبادة، توبة، خلوة..."},
-    {key:"ana",label:"أنا",icon:"🌱",color:C.gold,hint:"نفسي — صحتي، علمي، تطويري..."},
-    {key:"akhar",label:"الآخر",icon:"👥",color:C.blue,hint:"علاقاتي — أسرتي، أصدقائي، مجتمعي..."},
+    {key:"allah",label:"الله",icon:"🕌",color:C.g,hint:"تخلية: جهل، شبهات، حنق · تحلية: خشوع، إخلاص، معرفة الله..."},
+    {key:"ana",label:"أنا",icon:"🌱",color:C.gold,hint:"تخلية: وهم الكمال، جلد الذات · تحلية: تبصر، مهارة، تعبير..."},
+    {key:"akhar",label:"الآخر",icon:"👥",color:C.blue,hint:"تخلية: غل، غيبة، انشغال · تحلية: رحمة، بر، سلام، فقه اختلاف..."},
   ];
 
   return(
@@ -326,7 +365,10 @@ function MonthlyView({goals,setGoals,monthKey,onMonthChange,allDays}){
       {/* Month nav */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,background:C.surf,borderRadius:16,padding:"14px 18px",border:`1px solid ${C.border}`}}>
         <button onClick={prevMonth} style={{...S.ghost,padding:"6px 14px"}}>◀</button>
-        <div style={{flex:1,textAlign:"center",fontSize:17,fontWeight:900,color:C.dark}}>{fmtMonthAr(monthKey)}</div>
+        <div style={{flex:1,textAlign:"center"}}>
+          <div style={{fontSize:17,fontWeight:900,color:C.dark}}>{fmtMonthAr(monthKey)}</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>{(()=>{try{const[y,mo]=monthKey.split("-");return new Date(y,mo-1,15).toLocaleDateString("ar-SA-u-ca-islamic-umalqura",{year:"numeric",month:"long"});}catch{return"";}})()}</div>
+        </div>
         <button onClick={nextMonth} style={{...S.ghost,padding:"6px 14px"}}>▶</button>
       </div>
 
@@ -342,8 +384,8 @@ function MonthlyView({goals,setGoals,monthKey,onMonthChange,allDays}){
       </div>
 
       {/* Goals */}
-      <h3 style={{fontSize:16,fontWeight:900,color:C.dark,marginBottom:4}}>مقاصد الشهر</h3>
-      <p style={{fontSize:13,color:C.muted,marginBottom:16}}>حدّد مقصدك مع الله، ومع نفسك، ومع الآخرين هذا الشهر</p>
+      <h3 style={{fontSize:16,fontWeight:900,color:C.dark,marginBottom:4}}>غايات الشهر ومقاصده</h3>
+      <p style={{fontSize:13,color:C.muted,marginBottom:16,lineHeight:1.9}}>حدّد مقاصدك مع كل محور — لكل غاية: ما تريد <strong style={{color:C.red}}>تخليته</strong> (إزالته) وما تريد <strong style={{color:C.g}}>تحليته</strong> (بناءه)</p>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         {GOALS.map(g=>(
           <div key={g.key} style={{background:C.surf,borderRadius:18,border:`2px solid ${g.color}22`,overflow:"hidden"}}>
@@ -351,16 +393,65 @@ function MonthlyView({goals,setGoals,monthKey,onMonthChange,allDays}){
               <span style={{fontSize:26}}>{g.icon}</span>
               <div>
                 <div style={{fontSize:16,fontWeight:900,color:g.color}}>{g.label}</div>
-                <div style={{fontSize:12,color:C.muted}}>{g.hint}</div>
+                <div style={{fontSize:12,color:C.muted,lineHeight:1.8}}>{g.hint}</div>
               </div>
             </div>
             <div style={{padding:"14px 18px"}}>
               <textarea dir="rtl" value={goals[g.key]||""} onChange={e=>setGoals(gls=>({...gls,[g.key]:e.target.value}))} rows={4}
-                placeholder={`مقصدي مع ${g.label} هذا الشهر...`} style={{...S.textarea,minHeight:90,fontSize:14}}/>
+                placeholder={`مقصدي مع ${g.label} هذا الشهر...\n\n🔻 تخلية (ما أزيله): ...\n🔺 تحلية (ما أبنيه): ...`} style={{...S.textarea,minHeight:100,fontSize:14}}/>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Weekly overview */}
+      {monthDays.length>0&&(()=>{
+        // Group days by week (Saturday-based)
+        const sorted=monthDays.sort((a,b)=>a.date.localeCompare(b.date));
+        const weeks=[];let currentWeek=[];
+        sorted.forEach(d=>{
+          const dow=new Date(d.date+"T12:00:00").getDay();
+          if(dow===6&&currentWeek.length>0){weeks.push(currentWeek);currentWeek=[];}
+          currentWeek.push(d);
+        });
+        if(currentWeek.length>0)weeks.push(currentWeek);
+        const DAYS_AR=["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+        return(
+          <div style={{marginTop:24,background:C.surf,borderRadius:18,padding:"18px 20px",border:`1px solid ${C.border}`}}>
+            <h4 style={{fontSize:14,fontWeight:800,color:C.dark,marginBottom:14}}>📅 نظرة أسبوعية — {fmtMonthAr(monthKey)}</h4>
+            {weeks.map((week,wi)=>{
+              const weekSunbula=week.reduce((a,d)=>a+FRUITS.filter(f=>d.fruits[f.key]).length,0);
+              const weekPrayers=week.reduce((a,d)=>a+PRAYERS.filter(p=>d.prayers[p.key]?.trim()).length,0);
+              return(
+                <div key={wi} style={{marginBottom:12,padding:"10px 14px",background:"#FAFAF5",borderRadius:12,border:`1px solid ${C.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={{fontSize:13,fontWeight:700,color:C.mid}}>الأسبوع {wi+1}</span>
+                    <div style={{display:"flex",gap:12,fontSize:12,color:C.muted}}>
+                      <span>🕌 {weekPrayers}</span>
+                      <span>🌾 {weekSunbula}</span>
+                      <span>📅 {week.length} يوم</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:4}}>
+                    {week.map(d=>{
+                      const done=FRUITS.filter(f=>d.fruits[f.key]).length;
+                      const pct=Math.round((done/FRUITS.length)*100);
+                      return(
+                        <div key={d.date} style={{flex:1,textAlign:"center"}} title={`${DAYS_AR[new Date(d.date+"T12:00:00").getDay()]} — ${done}/${FRUITS.length}`}>
+                          <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{new Date(d.date+"T12:00:00").getDate()}</div>
+                          <div style={{height:24,background:"#EDE6DA",borderRadius:6,overflow:"hidden",position:"relative"}}>
+                            <div style={{position:"absolute",bottom:0,width:"100%",height:`${pct}%`,background:pct>=70?C.g:pct>=40?C.gold:C.muted+"44",borderRadius:6,transition:"height .3s"}}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Fruits heat strip */}
       {monthDays.length>0&&(
@@ -524,8 +615,13 @@ function DetailView({item,allItems,onBack,onUpdate,onDelete,onEdit}){
     <div style={{maxWidth:840,margin:"0 auto",padding:"24px 20px 80px"}} className="fade">
       <button onClick={onBack} style={S.ghost}>→ العودة</button>
       <div style={{background:C.surf,borderRadius:22,overflow:"hidden",border:`1px solid ${C.border}`,margin:"18px 0 22px",boxShadow:"0 4px 20px rgba(0,0,0,.06)"}}>
-        {thumb&&<div style={{height:220,position:"relative"}}><img src={thumb} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/><div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.5),transparent 60%)"}}/>{item.url&&<a href={item.url} target="_blank" rel="noopener noreferrer" style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(0,0,0,.6)",color:"#fff",width:56,height:56,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,textDecoration:"none",border:"2px solid rgba(255,255,255,.3)"}}>▶</a>}</div>}
-        {!thumb&&item.url&&<div style={{background:`linear-gradient(135deg,${T.color}18,${T.color}28)`,height:65,display:"flex",alignItems:"center",justifyContent:"center"}}><a href={item.url} target="_blank" rel="noopener noreferrer" style={{...S.primary,textDecoration:"none"}}>{T.icon} فتح الرابط</a></div>}
+        {vid?(
+          <div style={{position:"relative",paddingBottom:"56.25%",height:0,background:"#000"}}>
+            <iframe src={`https://www.youtube.com/embed/${vid}`} title={item.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}}/>
+          </div>
+        ):item.url?(
+          <div style={{background:`linear-gradient(135deg,${T.color}18,${T.color}28)`,height:65,display:"flex",alignItems:"center",justifyContent:"center"}}><a href={item.url} target="_blank" rel="noopener noreferrer" style={{...S.primary,textDecoration:"none"}}>{T.icon} فتح الرابط</a></div>
+        ):null}
         <div style={{padding:"18px 22px"}}>
           <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
             <div style={{flex:1}}><div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}><TypeBadge type={item.type}/><span style={{background:C.g+"22",color:C.g,borderRadius:20,padding:"4px 14px",fontSize:12,fontWeight:700}}>{item.category}</span></div><h2 style={{fontSize:18,fontWeight:900,color:C.dark,lineHeight:1.6}}>{item.title}</h2></div>
@@ -548,6 +644,67 @@ function DetailView({item,allItems,onBack,onUpdate,onDelete,onEdit}){
         {tab==="lessons"&&<div><p style={{fontSize:13,color:C.muted,marginBottom:10}}>ما الذي تعلمته؟</p><div style={{display:"flex",gap:8,marginBottom:12}}><input dir="rtl" value={newL} onChange={e=>setNewL(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addL()} placeholder="درس مستفاد..." style={{...S.input,flex:1}}/><button onClick={addL} style={S.primary}>+</button></div>{lessons.length===0?<div style={S.empty}>لا دروس بعد 💡</div>:lessons.map((l,i)=><div key={i} style={{...S.row,borderRight:`4px solid ${C.gold}`}}><span style={{color:C.gold}}>💡</span><span style={{flex:1,fontSize:13,lineHeight:1.8}}>{l}</span><button onClick={()=>{const u=lessons.filter((_,x)=>x!==i);setLessons(u);persist({lessons:u});}} style={S.del}>×</button></div>)}</div>}
         {tab==="actions"&&<div><p style={{fontSize:13,color:C.muted,marginBottom:10}}>الخطوات العملية</p><div style={{display:"flex",gap:8,marginBottom:12}}><input dir="rtl" value={newA} onChange={e=>setNewA(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addA()} placeholder="خطوة تطبيقية..." style={{...S.input,flex:1}}/><button onClick={addA} style={S.primary}>+</button></div>{actions.length===0?<div style={S.empty}>لا خطوات بعد ✅</div>:actions.map((a,i)=><div key={i} style={{...S.row,borderRight:`4px solid ${C.g}`}}><span style={{color:C.g}}>✅</span><span style={{flex:1,fontSize:13,lineHeight:1.8}}>{a}</span><button onClick={()=>{const u=actions.filter((_,x)=>x!==i);setActions(u);persist({actions:u});}} style={S.del}>×</button></div>)}</div>}
         {tab==="connect"&&<div><h4 style={{fontSize:14,fontWeight:800,color:C.dark,marginBottom:10}}>✨ مرتبطة بوسوم مشتركة</h4>{related.length===0?<div style={S.empty}>لا عناصر مرتبطة — أضف وسوماً مشتركة</div>:related.map(x=><div key={x.id} style={{...S.row,cursor:"pointer"}} onClick={()=>onBack(x)}><TypeBadge type={x.type} small/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{x.title}</div><div style={{display:"flex",gap:4,marginTop:3,flexWrap:"wrap"}}>{x.tags?.filter(t=>item.tags?.includes(t)).map(t=><Tag key={t} label={t} active small/>)}</div></div><span style={{fontSize:11,color:C.muted,background:C.goldBg,borderRadius:20,padding:"2px 8px"}}>{sharedTags(x,item)} مشترك</span></div>)}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   دليلي — GUIDE / REFERENCE TAB
+══════════════════════════════════════════════════ */
+function DaliliView(){
+  const[openCard,setOpenCard]=useState(null);
+  const toggle=id=>setOpenCard(o=>o===id?null:id);
+  const GUIDE=[
+    {id:"fiqh",icon:"🌿",title:"فقه النفس",color:C.g,
+     content:"فقه النفس مادة تُقدَّم منذ عام 2002، وهي المنظور الإسلامي للنفس الإنسانية. ثلاثية:\n\n📖 اقرأ — كيف أفكر وأعقل\n💚 ونفس — كيف أتبصر بنفسي وأزكيها\n👥 لتعارفوا — كيف أتعامل مع الآخرين\n\nالمحور الأساسي: الله · أنا · الآخر"},
+    {id:"khutta",icon:"📋",title:"خطة اليوم والليلة",color:C.gold,
+     content:"الخطة = أرض ممطورة بين أرضين — لها وضوح وحدود.\n\nأهميتها للصحة النفسية: الوضوح يزيل الخوف من المجهول، ويريح النفس.\n\nبداية اليوم في الإسلام: من المغرب — لا من الصباح.\n\nالتخطيط يبدأ من الليلة السابقة، تهيئةً للنفس."},
+    {id:"khamasi",icon:"🌾",title:"خماسية اليوم والليلة",color:C.g,
+     content:"أقل القليل الذي إن اعتُنيَ به تصلح الإنتاجية والصحة والعلاقات:\n\n🕌 الصلاة على وقتها — مركزية الخطة\n📿 أعمال لا تُترك — وتر، سنة الفجر، ضحى، أذكار، ورد\n📚 طلب علم — وحي (عام) + استخلاف (تخصصك)\n🌿 ترويح وراحة ورياضة — لا تهدم ما سبق\n👥 صلة اجتماعية حقيقية — وجاهية لا رقمية"},
+    {id:"aqal",icon:"💎",title:"أقل القليل",color:C.blue,
+     content:"«أحب الأعمال إلى الله أدومها وإن قلّ» — صحيح البخاري\n\nأقل القليل يعبّر عن صدق النفس، وقدرة في تدرّج الأعمال.\n\nالخطورة: من لا يرضى بأقل القليل عنده «كِبر خفي» — يريد الكمال فلا يفعل شيئاً.\n\nالحل: ابدأ بأقل القليل، كافئ نفسك عليه، واستمر."},
+    {id:"sawarif",icon:"⚠️",title:"الصوارف والمعوقات",color:C.red,
+     content:"ج.هـ.ل = ثلاثة أحرف تختصر كل ما يصرف عن الخير:\n\nج = جهل — بأهمية الأعمال وكيفيتها\nهـ = هوى — خمس كافات: الكِبر، الكذب، الكسل، الكَلَف، الكمال الموهوم\nل = لعب · لغو · لهو — ضياع الأوقات\n\nالجهل يغذي الهوى، والهوى يغذي اللهو، واللهو يغذي الجهل — دائرة مغلقة."},
+    {id:"ilaj",icon:"💚",title:"الصدق والصبر والرحمة",color:C.g,
+     content:"العلاج من الصوارف بثلاثية:\n\n✅ الصدق — أن تصدق نفسك قبل الآخرين، تعمل فوراً، تمسك عن الصوارف\n⏳ الصبر — حبس النفس على ما ينفع وعن ما يضر، الثبات على أقل القليل\n💛 الرحمة — ارحم نفسك! لا تجلدها، لا تقارن نهايات آخرين ببداياتك\n\nسقوط وقيام — والدنيا هكذا."},
+    {id:"ghayat",icon:"🎯",title:"غايات الشهر ومقاصده",color:C.gold,
+     content:"قبل أي يوم — اجلس مع نفسك واكتب غاياتك:\n\n🕌 الله — تخلية (إزالة جهل، شبهات، حنق) + تحلية (خشوع، إخلاص، معرفة)\n🌱 أنا — تخلية (وهم الكمال، جلد الذات) + تحلية (تبصر، مهارة، تعبير)\n👥 الآخر — تخلية (غل، غيبة، انشغال) + تحلية (رحمة، بر، سلام)\n\nالأولى فالأولى — لا تملأ الصفحة بأشياء كثيرة."},
+    {id:"yawm",icon:"📅",title:"الصفحة اليومية",color:C.purple,
+     content:"كل يوم في المذكرة يحوي:\n\n🕌 الصلوات الثمان — ركعتا الفجر، الفجر، الضحى، الظهر، العصر، المغرب، العشاء، الوتر\n📖 بعد كل صلاة: فراغ للملاحظات (صلّيت أم لا، دعاء، خاطرة)\n🌾 السنبلة اليومية — 7 أعمال: ورد، علم وحي، استخلاف، رياضة، ترويح، لتعارفوا، مذكرة\n✨ ثمرات اليوم — ماذا حصدت اليوم فكرياً وسلوكياً\n\nفي رمضان يُضاف: ختمة (4 صفحات بعد كل صلاة)، دعاء (الفجر والمغرب والوتر)، قيام"},
+    {id:"khartta",icon:"🗺️",title:"خارطة العلوم",color:C.teal,
+     content:"كل ما يعرض للنفس = مادة (ماذا) + آلة (كيف)\n\n🌍 آفاق — الزمان، المكان (جماد، نبات، حيوان، سماء)\n💚 أنفس — أنا (جسد + روح) + الآخرون\n\n🧠 العقل — البيان واللغة والرياضيات → المنطق\n🔬 النظر — البحث العلمي والتحقق\n\n📖 البديل عن الفلسفة: الوحي — القرآن والسنة\nالعقل أولاً (خادم) ثم الوحي (مخدوم)"},
+  ];
+  return(
+    <div style={{maxWidth:820,margin:"0 auto",padding:"24px 20px 80px"}} className="fade">
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <span style={{fontSize:40}}>📖</span>
+        <h2 style={{fontSize:20,fontWeight:900,color:C.dark,marginTop:8}}>دليلي</h2>
+        <p style={{fontSize:14,color:C.muted,lineHeight:1.9}}>مرجعك الدائم — افهم كل قسم في المذكرة ولماذا هو مهم</p>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {GUIDE.map(g=>(
+          <div key={g.id} style={{background:C.surf,borderRadius:18,border:`2px solid ${openCard===g.id?g.color+"44":C.border}`,overflow:"hidden",transition:"all .2s",boxShadow:openCard===g.id?"0 4px 20px rgba(0,0,0,.08)":"none"}}>
+            <div onClick={()=>toggle(g.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 18px",cursor:"pointer",userSelect:"none"}}>
+              <span style={{fontSize:28,flexShrink:0}}>{g.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:800,color:g.color}}>{g.title}</div>
+              </div>
+              <span style={{color:C.muted,fontSize:16,transition:"transform .2s",transform:openCard===g.id?"rotate(180deg)":"rotate(0)"}}>{openCard===g.id?"▲":"▼"}</span>
+            </div>
+            {openCard===g.id&&(
+              <div style={{padding:"0 18px 18px",animation:"fadeIn .2s ease"}}>
+                <div style={{background:`${g.color}08`,borderRadius:12,padding:"14px 16px",border:`1px solid ${g.color}18`,whiteSpace:"pre-wrap",fontSize:14,lineHeight:2,color:C.dark}}>
+                  {g.content}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{textAlign:"center",marginTop:28,padding:"16px 20px",background:C.goldBg,borderRadius:16,border:`1px solid ${C.border}`}}>
+        <p style={{fontSize:13,color:C.mid,lineHeight:1.9}}>📺 المصدر: قناة فقه النفس — مكاني · د. عبدالرحمن ذاكر الهاشمي</p>
+        <p style={{fontSize:12,color:C.muted,marginTop:4}}>حقوق الطبع محفوظة في الآخرة — للجميع حق الانتفاع الشخصي</p>
       </div>
     </div>
   );
@@ -598,7 +755,7 @@ function TagMap({items,onSelectItem}){
    ITEM FORM
 ══════════════════════════════════════════════════ */
 function ItemForm({initial,onSave,onClose}){
-  const[form,setForm]=useState({type:initial?.type||"video",title:initial?.title||"",url:initial?.url||"",category:initial?.category||CATS[0],tags:initial?.tags?.join("، ")||"",summary:initial?.summary||"",content:initial?.content||""});
+  const[form,setForm]=useState({type:initial?.type||"video",title:initial?.title||"",url:initial?.url||"",category:initial?.category||CATS_MAIN[0],tags:initial?.tags?.join("، ")||"",summary:initial?.summary||"",content:initial?.content||""});
   const up=(k,v)=>setForm(f=>({...f,[k]:v}));
   const T=TYPES[form.type];const vid=ytId(form.url);
   const submit=()=>{if(!form.title.trim()){alert("أدخل عنواناً");return;}onSave({...form,tags:form.tags?form.tags.split(/[،,\s]+/).map(t=>t.trim()).filter(Boolean):[]});};
@@ -613,7 +770,7 @@ function ItemForm({initial,onSave,onClose}){
           <div><label style={S.label}>العنوان *</label><input dir="rtl" value={form.title} onChange={e=>up("title",e.target.value)} placeholder={`عنوان ${T.label}...`} style={S.input}/></div>
           {(form.type==="video"||form.type==="link"||form.type==="pdf")&&<div><label style={S.label}>{form.type==="video"?"رابط يوتيوب":"الرابط"}</label><input dir="ltr" value={form.url} onChange={e=>up("url",e.target.value)} placeholder="https://..." style={{...S.input,textAlign:"left"}}/>{vid&&<img src={`https://img.youtube.com/vi/${vid}/mqdefault.jpg`} alt="" style={{width:"100%",borderRadius:8,marginTop:6,maxHeight:90,objectFit:"cover"}}/>}</div>}
           {form.type==="page"&&<div><label style={S.label}>المحتوى</label><textarea dir="rtl" value={form.content} onChange={e=>up("content",e.target.value)} rows={4} placeholder="اكتب صفحتك هنا..." style={S.textarea}/></div>}
-          <div><label style={S.label}>التصنيف</label><select dir="rtl" value={form.category} onChange={e=>up("category",e.target.value)} style={S.input}>{CATS.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+          <div><label style={S.label}>التصنيف</label><select dir="rtl" value={form.category} onChange={e=>up("category",e.target.value)} style={S.input}>{ALL_CATS.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div><label style={S.label}>الوسوم (بفاصلة)</label><input dir="rtl" value={form.tags} onChange={e=>up("tags",e.target.value)} placeholder="النفس، التطوير، الأسرة..." style={S.input}/>{form.tags&&<div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>{form.tags.split(/[،,\s]+/).filter(Boolean).map(t=><Tag key={t} label={t}/>)}</div>}</div>
           <div><label style={S.label}>ملخص</label><textarea dir="rtl" value={form.summary} onChange={e=>up("summary",e.target.value)} rows={2} placeholder="عمَّ يتحدث؟" style={{...S.textarea,minHeight:60}}/></div>
         </div>
@@ -629,7 +786,13 @@ function ItemForm({initial,onSave,onClose}){
 /* ══════════════════════════════════════════════════
    AI ASSISTANT — CLAUDE
 ══════════════════════════════════════════════════ */
-const AI_SYSTEM = `أنت مساعد شخصي ذكي متخصص في مساعدة المستخدم على الاستفادة من محتوى قناة مكاني (فقه النفس) بقيادة د. عبدالرحمن زاكر الهاشمي.
+const AI_SYSTEM = `أنت مساعد شخصي ذكي متخصص في مساعدة المستخدم على الاستفادة من محتوى قناة مكاني (فقه النفس) بقيادة د. عبدالرحمن ذاكر الهاشمي.
+
+فقه النفس ثلاثية: اقرأ (كيف أفكر وأعقل)، ونفس (كيف أتبصر بنفسي)، لتعارفوا (كيف أتعامل مع الآخرين).
+المحور: الله / أنا / الآخر. المنهج: تخلية وتحلية. المبدأ: أقل القليل.
+الصوارف: ج.هـ.ل = جهل، هوى (كبر، كذب، كسل، كلف، كمال موهوم)، لعب/لغو/لهو.
+العلاج: صدق، صبر، رحمة.
+الخماسية اليومية: الصلاة على وقتها، أعمال لا تُترك، طلب علم (وحي + استخلاف)، ترويح وراحة ورياضة، صلة اجتماعية حقيقية.
 
 دورك:
 1. مساعدة المستخدم في استخلاص الدروس والفوائد من المحتوى الذي يتعلمه
@@ -781,6 +944,53 @@ function AIAssistant({context}){
 }
 
 /* ══════════════════════════════════════════════════
+   EXPORT / IMPORT BACKUP
+══════════════════════════════════════════════════ */
+function ExportImport({items,allDays,allMonths,onImport}){
+  const[show,setShow]=useState(false);
+  const doExport=()=>{
+    const data={version:2,exported:new Date().toISOString(),items,days:allDays,months:allMonths};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=`makany-backup-${todayStr()}.json`;a.click();
+    URL.revokeObjectURL(url);
+  };
+  const doImport=e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(data.items||data.days||data.months){
+          if(confirm(`استيراد ${(data.items||[]).length} عنصر و ${Object.keys(data.days||{}).length} يوم؟`)){
+            onImport(data);setShow(false);
+          }
+        }else{alert("ملف غير صالح");}
+      }catch{alert("خطأ في قراءة الملف");}
+    };
+    reader.readAsText(file);
+  };
+  if(!show)return(<button onClick={()=>setShow(true)} style={{background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:8,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"Cairo"}} title="نسخ احتياطي">💾</button>);
+  return(
+    <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShow(false)}>
+      <div style={{...S.modal,maxWidth:400}}>
+        <h3 style={{fontSize:16,fontWeight:900,color:C.dark,marginBottom:16}}>💾 النسخ الاحتياطي</h3>
+        <p style={{fontSize:13,color:C.muted,marginBottom:16,lineHeight:1.9}}>احفظ بياناتك كملف JSON — حماية من فقدان البيانات</p>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <button onClick={doExport} style={{...S.primary,padding:"14px 20px",fontSize:15}}>⬇️ تحميل نسخة احتياطية</button>
+          <label style={{...S.ghost,padding:"14px 20px",fontSize:14,textAlign:"center",cursor:"pointer",display:"block"}}>
+            ⬆️ استيراد من ملف
+            <input type="file" accept=".json" onChange={doImport} style={{display:"none"}}/>
+          </label>
+          <p style={{fontSize:11,color:C.muted,textAlign:"center"}}>📊 {items.length} عنصر · {Object.keys(allDays).length} يوم · {Object.keys(allMonths).length} شهر</p>
+        </div>
+        <button onClick={()=>setShow(false)} style={{...S.ghost,marginTop:12,width:"100%"}}>إغلاق</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
    MAIN APP
 ══════════════════════════════════════════════════ */
 export default function MakanyHub(){
@@ -790,9 +1000,10 @@ export default function MakanyHub(){
   const[allDays,setAllDays]=useState({});
   const[allMonths,setAllMonths]=useState({});
   const[loading,setLoading]=useState(true);
+  const[isRamadan,setIsRamadan]=useState(false);
 
   // Nav
-  const[mainView,setMainView]=useState("library"); // library | planner | map
+  const[mainView,setMainView]=useState("planner"); // library | planner | map
   const[plannerTab,setPlannerTab]=useState("daily"); // daily | monthly | progress
   const[libView,setLibView]=useState("grid"); // grid | detail
 
@@ -813,14 +1024,16 @@ export default function MakanyHub(){
   useEffect(()=>{
     (async()=>{
       try{
-        const[r1,r2,r3]=await Promise.allSettled([
+        const[r1,r2,r3,r4]=await Promise.allSettled([
           storage.get("mkn_items_v2"),
           storage.get("mkn_days_v1"),
           storage.get("mkn_months_v1"),
+          storage.get("mkn_ramadan"),
         ]);
         if(r1.status==="fulfilled"&&r1.value?.value)setItems(JSON.parse(r1.value.value));
         if(r2.status==="fulfilled"&&r2.value?.value)setAllDays(JSON.parse(r2.value.value));
         if(r3.status==="fulfilled"&&r3.value?.value)setAllMonths(JSON.parse(r3.value.value));
+        if(r4.status==="fulfilled"&&r4.value?.value)setIsRamadan(JSON.parse(r4.value.value));
       }catch(e){}
       setLoading(false);
     })();
@@ -834,6 +1047,12 @@ export default function MakanyHub(){
   const addItem=d=>saveItems([{...d,id:genId(),dateAdded:new Date().toISOString(),done:false,notes:"",lessons:[],actions:[],continueWith:[]},...items]);
   const updateItem=u=>{const nv=items.map(x=>x.id===u.id?u:x);saveItems(nv);if(selected?.id===u.id)setSelected(u);};
   const deleteItem=id=>{saveItems(items.filter(x=>x.id!==id));setLibView("grid");setSelected(null);};
+
+  const handleImport=data=>{
+    if(data.items)saveItems(data.items);
+    if(data.days)saveDays(data.days);
+    if(data.months)saveMonths(data.months);
+  };
 
   // Planner ops
   const getDay=date=>allDays[date]||emptyDay(date);
@@ -869,8 +1088,9 @@ export default function MakanyHub(){
   const stats={total:items.length,done:items.filter(x=>x.done).length,lessons:items.reduce((a,x)=>a+(x.lessons?.length||0),0),fruits:fruitsDoneToday};
 
   const NAV=[
-    {id:"library",icon:"📚",label:"المكتبة"},
     {id:"planner",icon:"📓",label:"مذكرتي"},
+    {id:"library",icon:"📚",label:"المكتبة"},
+    {id:"dalili",icon:"📖",label:"دليلي"},
     {id:"map",icon:"🗺️",label:"الخريطة"},
   ];
   const PLANNER_TABS=[
@@ -905,6 +1125,12 @@ export default function MakanyHub(){
               <Stat icon="✅" val={stats.done} label="مكتمل"/>
               <Stat icon="💡" val={stats.lessons} label="دروس"/>
               <Stat icon="🌾" val={`${stats.fruits}/7`} label="ثمرات اليوم"/>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button onClick={()=>{const nv=!isRamadan;setIsRamadan(nv);try{storage.set("mkn_ramadan",JSON.stringify(nv));}catch{}}} style={{display:"flex",alignItems:"center",gap:4,background:isRamadan?"rgba(212,168,85,.3)":"rgba(255,255,255,.1)",color:"#fff",border:`1px solid ${isRamadan?"rgba(212,168,85,.5)":"rgba(255,255,255,.2)"}`,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Cairo",transition:"all .2s"}}>
+                {isRamadan?"🌙 رمضان":"☀️ عادي"}
+              </button>
+              <ExportImport items={items} allDays={allDays} allMonths={allMonths} onImport={handleImport}/>
             </div>
           </div>
 
@@ -974,6 +1200,7 @@ export default function MakanyHub(){
           allItems={items}
           dateStr={currentDate}
           onDateChange={setCurrentDate}
+          isRamadan={isRamadan}
         />
       )}
       {mainView==="planner"&&plannerTab==="monthly"&&(
@@ -988,6 +1215,9 @@ export default function MakanyHub(){
       {mainView==="planner"&&plannerTab==="progress"&&(
         <ProgressView allDays={allDays}/>
       )}
+
+      {/* ══ دليلي ══ */}
+      {mainView==="dalili"&&<DaliliView/>}
 
       {/* ══ MAP ══ */}
       {mainView==="map"&&<TagMap items={items} onSelectItem={x=>{setSelected(x);setMainView("library");setLibView("detail");}}/>}
